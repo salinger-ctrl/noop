@@ -42,7 +42,9 @@ for binp in glob.glob(os.path.join(app, "Contents/MacOS/*")):
 print(f"scrubbed {total} occurrence(s) of the build home path")
 PY
 
-codesign --force --sign - "$APP"
+# --options runtime applies the Hardened Runtime (CS_RUNTIME), which blocks
+# DYLD_INSERT_LIBRARIES dylib injection into the process. Safe: the app uses no JIT.
+codesign --force --options runtime --sign - "$APP"
 codesign --verify --verbose=1 "$APP"
 
 residual=$(strings -a "$APP/Contents/MacOS/"* 2>/dev/null | grep -c "$HOME" || true)

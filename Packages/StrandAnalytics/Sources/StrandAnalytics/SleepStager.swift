@@ -742,7 +742,7 @@ public enum SleepStager {
                 if counts[s] == nil { order.append(s) }
                 counts[s, default: 0] += 1
             }
-            let best = counts.values.max()!
+            guard let best = counts.values.max() else { out.append(labels[i]); continue }
             let winners = order.filter { counts[$0] == best }  // insertion order preserved
             out.append(winners.contains(labels[i]) ? labels[i] : winners[0])
         }

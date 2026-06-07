@@ -856,7 +856,8 @@ object SleepStager {
                 if (counts[s] == null) order.add(s)
                 counts[s] = (counts[s] ?: 0) + 1
             }
-            val best = counts.values.max()
+            val best = counts.values.maxOrNull()
+            if (best == null) { out.add(labels[i]); continue }
             val winners = order.filter { counts[it] == best } // insertion order preserved
             out.add(if (winners.contains(labels[i])) labels[i] else winners[0])
         }

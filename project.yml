@@ -60,7 +60,9 @@ targets:
         PRODUCT_NAME: NOOP
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
-        ENABLE_HARDENED_RUNTIME: NO
+        # Hardened Runtime closes the DYLD_INSERT_LIBRARIES injection vector for the
+        # distributed (ad-hoc) build. The app uses no JIT / unsigned-exec memory, so it's safe.
+        ENABLE_HARDENED_RUNTIME: YES
         COMBINE_HIDPI_IMAGES: YES
     dependencies:
       - package: WhoopProtocol
