@@ -134,7 +134,15 @@ final class AppModel: ObservableObject {
         return n > 0 ? (sum / Double(n)).squareRoot() : 0
     }
 
-    func scan() { ble.connect() }
+    /// Start scanning for the strap. When no model is given, use the one the user
+    /// picked (persisted under "selectedWhoopModel"), so every scan entry point —
+    /// Live, onboarding, the menu bar, Settings — honours the same choice.
+    func scan(model: WhoopModel? = nil) {
+        let chosen = model
+            ?? UserDefaults.standard.string(forKey: "selectedWhoopModel").flatMap(WhoopModel.init(rawValue:))
+            ?? .whoop4
+        ble.connect(model: chosen)
+    }
     func disconnect() { ble.disconnect() }
 
     /// Enable the realtime stream + mark it wanted so the keep-alive re-arms it (can't lapse).

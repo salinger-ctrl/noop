@@ -11,6 +11,7 @@ public final class BLEManager: NSObject, ObservableObject {
 
     // MARK: GATT UUIDs (authoritative, from FINDINGS.md)
     static let customService   = CBUUID(string: "61080001-8d6d-82b8-614a-1c8cb0f8dcc6")
+    static let whoop5Service   = CBUUID(string: "fd4b0001-cce1-4033-93ce-002d5875f58a") // WHOOP 5.0 / MG
     static let cmdWriteChar    = CBUUID(string: "61080002-8d6d-82b8-614a-1c8cb0f8dcc6") // CMD → strap
     static let cmdNotifyChar   = CBUUID(string: "61080003-8d6d-82b8-614a-1c8cb0f8dcc6") // responses
     static let eventNotifyChar = CBUUID(string: "61080004-8d6d-82b8-614a-1c8cb0f8dcc6") // events
@@ -96,6 +97,10 @@ public final class BLEManager: NSObject, ObservableObject {
     private var didBond = false
     private var clockRequested = false
     private var intentionalDisconnect = false
+    /// The strap family the user chose to pair. Drives which service we scan for
+    /// and which service we discover after connecting. Hydrated from the persisted
+    /// pick so restoration/reconnect after a relaunch target the right strap.
+    private var selectedModel: WhoopModel = .persisted
 
     /// Stable device id; matches the server's existing device for sync parity. Overridable.
     let deviceId: String
@@ -155,15 +160,16 @@ public final class BLEManager: NSObject, ObservableObject {
     }
 
     // MARK: Public API
-    public func connect() {
+    public func connect(model: WhoopModel = .persisted) {
         intentionalDisconnect = false
+        selectedModel = model
         guard central.state == .poweredOn else {
             log("Bluetooth not powered on (state=\(central.state.rawValue)); cannot scan yet")
             return
         }
-        log("Scanning for service \(BLEManager.customService)…")
+        log("Scanning for \(model.displayName)…")
         central.scanForPeripherals(
-            withServices: [BLEManager.customService],
+            withServices: [model.scanService],
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
     }
@@ -536,7 +542,7 @@ extension BLEManager: CBCentralManagerDelegate {
                 central.connect(p, options: nil)
             } else {
                 p.discoverServices([
-                    BLEManager.customService, BLEManager.heartRateService, BLEManager.batteryService,
+                    selectedModel.scanService, BLEManager.heartRateService, BLEManager.batteryService,
                 ])
             }
         } else {
@@ -561,7 +567,7 @@ extension BLEManager: CBCentralManagerDelegate {
         state.connected = true
         log("Connected — discovering services")
         peripheral.discoverServices([
-            BLEManager.customService, BLEManager.heartRateService, BLEManager.batteryService,
+            selectedModel.scanService, BLEManager.heartRateService, BLEManager.batteryService,
         ])
     }
 
@@ -631,7 +637,7 @@ extension BLEManager: CBCentralManagerDelegate {
             state.connected = true
             log("Restored CONNECTED peripheral \(p.identifier) — re-discovering services")
             p.discoverServices([
-                BLEManager.customService, BLEManager.heartRateService, BLEManager.batteryService,
+                selectedModel.scanService, BLEManager.heartRateService, BLEManager.batteryService,
             ])
         } else {
             state.connected = false
@@ -655,6 +661,9 @@ extension BLEManager: CBPeripheralDelegate {
                 peripheral.discoverCharacteristics([BLEManager.heartRateChar], for: s)
             case BLEManager.batteryService:
                 peripheral.discoverCharacteristics([BLEManager.batteryChar], for: s)
+            case BLEManager.whoop5Service:
+                // WHOOP 5.0 / MG uses a different command + framing path we don't drive yet.
+                log("WHOOP 5/MG detected — full MG support is still in progress; this build connects WHOOP 4.0.")
             default: break
             }
         }

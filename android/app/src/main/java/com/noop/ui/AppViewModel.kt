@@ -8,6 +8,7 @@ import com.noop.analytics.IntelligenceEngine
 import com.noop.analytics.UserProfile
 import com.noop.ble.LiveState
 import com.noop.ble.WhoopBleClient
+import com.noop.ble.WhoopModel
 import com.noop.data.DailyMetric
 import com.noop.data.WhoopDatabase
 import com.noop.data.WhoopRepository
@@ -49,6 +50,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Live connection + biometric snapshot, surfaced straight from the BLE client. */
     val live: StateFlow<LiveState> = ble.state
+
+    /** Which strap the user is pairing — drives the scan filter in [connect]. Defaults to WHOOP 4.0. */
+    private val _selectedModel = MutableStateFlow(WhoopModel.WHOOP4)
+    val selectedModel: StateFlow<WhoopModel> = _selectedModel.asStateFlow()
+    fun setSelectedModel(model: WhoopModel) { _selectedModel.value = model }
 
     // MARK: - Smoothed BPM (median over a short window, mirrors AppModel.bpm)
 
@@ -136,7 +142,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // MARK: - Strap controls (thin pass-throughs to the BLE client)
 
-    fun connect() = ble.connect()
+    fun connect() = ble.connect(_selectedModel.value)
 
     fun disconnect() {
         ble.disconnect()

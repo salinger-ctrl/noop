@@ -38,6 +38,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.noop.ble.WhoopModel
 
 /**
  * Live — the real-time strap view + hardware-test surface. A big smoothed HR number,
@@ -49,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 fun LiveScreen(viewModel: AppViewModel) {
     val live by viewModel.live.collectAsStateWithLifecycle()
     val bpm by viewModel.bpm.collectAsStateWithLifecycle()
+    val selectedModel by viewModel.selectedModel.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     // The runtime Bluetooth permission gates scanning. If it isn't granted, the Connect
@@ -123,6 +125,24 @@ fun LiveScreen(viewModel: AppViewModel) {
                 value = live.lastEvent ?: "—",
                 accent = Palette.textPrimary,
             )
+        }
+
+        // Strap picker — choose the model before scanning so we look for exactly one
+        // device family. Hidden once bonded; by then we know what's on the wrist.
+        if (!live.bonded) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Metrics.gap),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Strap", style = NoopType.footnote, color = Palette.textSecondary)
+                SegmentedPillControl(
+                    items = WhoopModel.entries.toList(),
+                    selection = selectedModel,
+                    label = { it.displayName },
+                    onSelect = { viewModel.setSelectedModel(it) },
+                )
+            }
         }
 
         // Controls.

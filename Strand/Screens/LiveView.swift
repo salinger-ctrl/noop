@@ -9,6 +9,11 @@ struct LiveView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var live: LiveState
 
+    /// Which strap the user is pairing — persists across launches. Drives which
+    /// BLE service we scan for so a WHOOP 4.0 scan never hangs on a WHOOP 5 wrist.
+    @AppStorage("selectedWhoopModel") private var selectedModelRaw = WhoopModel.whoop4.rawValue
+    private var selectedModel: WhoopModel { WhoopModel(rawValue: selectedModelRaw) ?? .whoop4 }
+
     /// Smoothed, spike-filtered live HR from AppModel (median over a short window).
     private var displayHR: Int? { model.bpm }
 
@@ -19,6 +24,7 @@ struct LiveView: View {
                 connectionRow
                 heartRateCard
                 statusGrid
+                if !live.bonded { modelPicker }
                 controls
                 logCard
             }
@@ -97,11 +103,30 @@ struct LiveView: View {
         }
     }
 
+    // MARK: - Strap picker
+
+    /// Pick the strap family before scanning. Hidden once bonded — by then we know
+    /// what's on the wrist.
+    private var modelPicker: some View {
+        HStack(spacing: 10) {
+            Text("Strap").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
+            SegmentedPillControl(
+                WhoopModel.allCases,
+                selection: Binding(
+                    get: { selectedModel },
+                    set: { selectedModelRaw = $0.rawValue }
+                ),
+                label: { $0.displayName }
+            )
+            Spacer()
+        }
+    }
+
     // MARK: - Controls
 
     private var controls: some View {
         HStack(spacing: 12) {
-            Button { model.scan() } label: {
+            Button { model.scan(model: selectedModel) } label: {
                 Label(live.connected ? "Re-scan" : "Scan & Connect",
                       systemImage: "antenna.radiowaves.left.and.right")
                     .frame(maxWidth: .infinity).padding(.vertical, 8)

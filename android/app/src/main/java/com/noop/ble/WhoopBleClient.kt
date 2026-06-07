@@ -235,6 +235,9 @@ class WhoopBleClient(
 
     /** True when the user asked to disconnect; suppresses the auto-rescan (Swift `intentionalDisconnect`). */
     private var intentionalDisconnect = false
+    /// The strap family the user chose to pair, remembered so an auto-reconnect after a
+    /// dropout re-scans for the same model instead of falling back to WHOOP 4.0.
+    private var selectedModel = WhoopModel.WHOOP4
 
     /** True while a scan is active, so we never start a second scan (Android scanner is stateful). */
     private var scanning = false
@@ -338,8 +341,9 @@ class WhoopBleClient(
      * Port of `BLEManager.connect()` → `central.scanForPeripherals(withServices:[customService])`.
      */
     @SuppressLint("MissingPermission")
-    fun connect() {
+    fun connect(model: WhoopModel = WhoopModel.WHOOP4) {
         intentionalDisconnect = false
+        selectedModel = model
         val adp = adapter
         // No Bluetooth LE hardware at all (most often an emulator / virtual device).
         if (adp == null || !context.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
@@ -366,20 +370,20 @@ class WhoopBleClient(
             log("Scan already in progress — ignoring")
             return
         }
-        // Filter by the WHOOP4 AND WHOOP5 service UUIDs, exactly like scanForPeripherals(withServices:).
-        // A ScanFilter list is OR-ed: a peripheral advertising either service matches.
+        // Filter to the strap the user picked — a single service, so a WHOOP 4.0
+        // scan never lingers on a WHOOP 5/MG wrist (or the reverse). The user
+        // chooses the model before this runs.
         val filters = listOf(
-            ScanFilter.Builder().setServiceUuid(ParcelUuid(WHOOP4_SERVICE)).build(),
-            ScanFilter.Builder().setServiceUuid(ParcelUuid(WHOOP5_SERVICE)).build(),
+            ScanFilter.Builder().setServiceUuid(ParcelUuid(model.service)).build(),
         )
         // LOW_LATENCY for a snappy first connect, mirroring the desktop app's eager scan.
         // We do NOT allow duplicates (CBCentralManagerScanOptionAllowDuplicatesKey: false).
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
-        log("Scanning for WHOOP service…")
+        log("Scanning for ${model.displayName}…")
         scanning = true
-        _state.value = _state.value.copy(scanning = true, statusNote = "Searching for your strap…")
+        _state.value = _state.value.copy(scanning = true, statusNote = "Searching for your ${model.displayName}…")
         try {
             sc.startScan(filters, settings, scanCallback)
         } catch (se: SecurityException) {
@@ -530,7 +534,16 @@ class WhoopBleClient(
             // delivers ALL services+characteristics in one callback, so we walk them directly.
 
             // 1. Custom service: capture the cmd-write char, FIRE THE BOND, queue the notify subs.
-            val custom = g.getService(WHOOP4_SERVICE) ?: g.getService(WHOOP5_SERVICE)
+            val whoop4 = g.getService(WHOOP4_SERVICE)
+            val whoop5 = g.getService(WHOOP5_SERVICE)
+            if (whoop4 == null && whoop5 != null) {
+                // WHOOP 5.0 / MG exposes a different service + characteristic set we don't drive yet.
+                log("WHOOP 5/MG detected — full MG support is still in progress; this build connects WHOOP 4.0.")
+                _state.value = _state.value.copy(
+                    statusNote = "WHOOP 5/MG detected. Full MG support is still in progress; this build connects WHOOP 4.0 straps.",
+                )
+            }
+            val custom = whoop4 ?: whoop5
             if (custom != null) {
                 cmdCharacteristic = custom.getCharacteristic(CMD_WRITE_CHAR)
 
@@ -1143,7 +1156,7 @@ class WhoopBleClient(
         if (!intentionalDisconnect) {
             log("Disconnected (status=$status); rescanning in 3s")
             handler.postDelayed({
-                if (!intentionalDisconnect) connect()
+                if (!intentionalDisconnect) connect(selectedModel)
             }, RECONNECT_DELAY_MS)
         } else {
             log("Disconnected (intentional)")

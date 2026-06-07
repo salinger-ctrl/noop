@@ -430,6 +430,10 @@ private struct ScanStep: View {
     @State private var scanning = false
     @State private var showHelp = false
 
+    /// Which strap to look for — shared with the Live screen via the same key.
+    @AppStorage("selectedWhoopModel") private var selectedModelRaw = WhoopModel.whoop4.rawValue
+    private var selectedModel: WhoopModel { WhoopModel(rawValue: selectedModelRaw) ?? .whoop4 }
+
     var body: some View {
         StepShell(title: "Find your strap",
                   subtitle: live.bonded ? "Bonded. You're set." : "We'll sweep the airwaves for it.") {
@@ -440,6 +444,20 @@ private struct ScanStep: View {
                 statusLine
 
                 if !live.bonded {
+                    VStack(spacing: 8) {
+                        Text("Which strap?").font(StrandFont.caption)
+                            .foregroundStyle(StrandPalette.textSecondary)
+                        SegmentedPillControl(
+                            WhoopModel.allCases,
+                            selection: Binding(
+                                get: { selectedModel },
+                                set: { selectedModelRaw = $0.rawValue }
+                            ),
+                            label: { $0.displayName }
+                        )
+                    }
+                    .disabled(scanning)
+
                     Button(action: startScan) {
                         Label(scanning ? "Scanning…" : "Scan", systemImage: "dot.radiowaves.left.and.right")
                     }
@@ -472,7 +490,7 @@ private struct ScanStep: View {
     private func startScan() {
         scanning = true
         showHelp = false
-        model.scan()
+        model.scan(model: selectedModel)
         // Surface the reassurance card if we haven't bonded after a calm beat.
         DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
             if !live.bonded {
