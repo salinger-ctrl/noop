@@ -15,6 +15,7 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -340,8 +341,17 @@ class WhoopBleClient(
     fun connect() {
         intentionalDisconnect = false
         val adp = adapter
-        if (adp == null || !adp.isEnabled) {
-            log("Bluetooth not powered on; cannot scan yet")
+        // No Bluetooth LE hardware at all (most often an emulator / virtual device).
+        if (adp == null || !context.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            log("No Bluetooth LE on this device")
+            _state.value = _state.value.copy(
+                scanning = false,
+                statusNote = "This device has no Bluetooth LE. NOOP has to run on a real phone with " +
+                    "Bluetooth, near your strap. It can't connect from an emulator or virtual device.")
+            return
+        }
+        if (!adp.isEnabled) {
+            log("Bluetooth is off")
             _state.value = _state.value.copy(
                 scanning = false, statusNote = "Bluetooth is off. Turn it on, then tap Connect.")
             return
