@@ -17,6 +17,19 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.6 — Share strap logs, and a worn-status fix
+
+- **New (Android): Share strap log.** Settings → Strap → **"Share strap log"** writes the connection
+  log to a file and opens the share sheet, so you can attach it to a bug report. Android's logs
+  weren't reachable without `adb`, which is why connection problems on Android (issues #17, #18) were
+  hard to diagnose — now they're one tap away.
+- **Fixed (Android): the "Worn" status always reading Off.** The Android default was wrong (`false`);
+  it now defaults to worn until the strap reports otherwise, matching the macOS app (issue #18).
+- **Mac:** the alarm debug log now prints your **local** wake time instead of UTC. Alarms already
+  fired at the correct local time — the log's "+0000" was just `Date`'s default UTC formatting.
+
+---
+
 ## 1.5 — WHOOP 5/MG: secure-pairing fix
 
 - **Fixed (experimental): WHOOP 5.0/MG stuck at "Finishing the secure pairing handshake."** The 5/MG

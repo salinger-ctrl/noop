@@ -387,6 +387,13 @@ fun SettingsScreen(vm: AppViewModel) {
                         ),
                     )
                 }
+
+                // Diagnostics: export the strap connection log so people can attach it to a bug report.
+                OutlinedButton(
+                    onClick = { LogExport.shareStrapLog(context, vm.ble.exportLogText()) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.textSecondary),
+                ) { Text("Share strap log (for bug reports)", style = NoopType.captionNumber) }
             }
         }
 

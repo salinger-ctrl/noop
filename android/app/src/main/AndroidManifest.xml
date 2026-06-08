@@ -120,6 +120,19 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <!-- Shares the strap log (a cache file) for bug reports. Not exported; read access is granted
+             per-share via FLAG_GRANT_READ_URI_PERMISSION. Authority is applicationId-scoped so the
+             full + demo flavors don't collide. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
     </application>
 
 </manifest>

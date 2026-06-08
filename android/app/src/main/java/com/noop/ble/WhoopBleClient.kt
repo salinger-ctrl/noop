@@ -67,7 +67,10 @@ data class LiveState(
     val heartRate: Int? = null,
     val rr: List<Int> = emptyList(),
     val batteryPct: Double? = null,
-    val worn: Boolean = false,
+    /** Wrist-wear from WRIST_ON/WRIST_OFF events. Defaults TRUE to match the macOS LiveState (Swift
+     *  parity) — assume worn until the strap says otherwise. (Was false, which made the UI show
+     *  "Worn: Off" forever when no WRIST_ON event arrived — issue #18.) */
+    val worn: Boolean = true,
     val lastEvent: String? = null,
     /** True while actively scanning for the strap (so the UI can show "Searching…"). */
     val scanning: Boolean = false,
@@ -136,6 +139,8 @@ class WhoopBleClient(
 
     companion object {
         private const val TAG = "WhoopBleClient"
+        /** Cap on the in-app strap-log ring buffer (for the "Share strap log" diagnostics export). */
+        private const val LOG_BUFFER_MAX = 2000
 
         // MARK: GATT UUIDs (authoritative, from BLEManager.swift / FINDINGS.md).
         //
@@ -272,6 +277,12 @@ class WhoopBleClient(
 
     /** All BLE work hops onto the main looper, matching CBCentralManager(queue: .main). */
     private val handler = Handler(Looper.getMainLooper())
+
+    /** In-memory ring buffer of the strap log so it can be exported from the UI for bug reports.
+     *  `log()` writes here (under [logBuffer]'s monitor) in addition to logcat; Android's `Log.d`
+     *  isn't reachable by a normal user, which is why people couldn't share logs (issues #17/#18). */
+    private val logBuffer = ArrayDeque<String>()
+    private val logTimeFmt = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US)
 
     /** Fired if a scan finds nothing in [SCAN_TIMEOUT_MS]; stops scanning and explains why. */
     private val scanTimeoutRunnable = Runnable {
@@ -1473,5 +1484,14 @@ class WhoopBleClient(
 
     private fun log(s: String) {
         Log.d(TAG, s)
+        // Mirror into the in-app ring buffer (format under the lock — SimpleDateFormat isn't
+        // thread-safe and log() is called from both the GATT binder thread and the main looper).
+        synchronized(logBuffer) {
+            logBuffer.addLast("${logTimeFmt.format(System.currentTimeMillis())}  $s")
+            while (logBuffer.size > LOG_BUFFER_MAX) logBuffer.removeFirst()
+        }
     }
+
+    /** Snapshot of the recent strap log, newest last, for the "Share strap log" diagnostics export. */
+    fun exportLogText(): String = synchronized(logBuffer) { logBuffer.joinToString("\n") }
 }
