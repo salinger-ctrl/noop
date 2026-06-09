@@ -17,6 +17,25 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.38 — Responsive during long history syncs (Mac, #64 / #65)
+
+- **Mac stays responsive during long historical offloads and dashboard analysis** (community PRs #64,
+  #65 by rr-allin; both verified against current `main`, symbols + the buzz path intact):
+  - **#64 (`BLEManager.swift`)** — offload frames are treated as bulk sync, not live UI traffic:
+    during a backfill, type-47/48/49/50/56 frames bypass the live `FrameRouter` and feed only the
+    `Backfiller`, drained in small batches (12) with `Task.yield()` between slices so SwiftUI can
+    paint. HISTORY_END ack logging is throttled (ack #1, then every 25th). `beginBackfill()` now
+    returns whether it actually started, so a deferred backfill no longer stamps `backfillLastAt`
+    (which would rate-limit a sync that never ran). Live HR (type-40) and the GET_DATA_RANGE liveness
+    watchdog still flow through the live path — unaffected.
+  - **#65 (`AppModel.swift`, `IntelligenceEngine.swift`)** — a completed backfill now refreshes the
+    dashboard cache (`repo.refresh(days: 120)`) instead of immediately running full analysis;
+    `analyzeRecent` early-returns if an analysis is already in flight (guarded on the existing
+    `computing` flag); `AnalyticsEngine.analyzeDay` runs in a utility-priority detached task with a
+    `Task.yield()` between days — so the heavy recovery/strain/sleep compute no longer stalls the main
+    actor.
+- Mac-only changes; Android gets the lockstep version bump.
+
 ## 1.37 — New first-run onboarding, Mac + Android parity (#36 / #63)
 
 - **A unified 11-step first-run onboarding** on both platforms (Welcome · What it does · Expectations ·
