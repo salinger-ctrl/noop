@@ -17,6 +17,25 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.39 — Wrist alerts for incoming calls (Android, #66)
+
+- **Buzz on incoming calls** (community PR #66 by DieserLiton; reimplemented as NoopApp). A dedicated
+  **Calls** section in Notifications settings, separate from per-app alerts:
+  - **Native phone calls** via a `PhoneCallReceiver` (READ_PHONE_STATE), and **best-effort VoIP** via the
+    existing notification listener (`VoipCallClassifier`, an 8-app allowlist). One coordinator
+    (`CallAlertController`) drives a bounded repeat cadence — immediate, then every 8s, max 4 buzzes.
+  - **Privacy contract intact** — reads only the phone *state* string (`RINGING`/`OFFHOOK`/`IDLE`, never
+    `EXTRA_INCOMING_NUMBER`) and a tiny set of notification *metadata* (package / `CATEGORY_CALL` / flags),
+    never the number, caller, title, text, or extras; no `READ_CALL_LOG`/`READ_CONTACTS`; nothing
+    sensitive logged. `READ_PHONE_STATE` is requested **only** when the user enables "Phone calls".
+  - Reuses the shared component system; the existing per-app wrist-alerts are untouched.
+- **Two correctness fixes applied on adoption** (from the review):
+  - `CallAlertController` now has a **self-healing 60s max-ring watchdog** — a dropped `PHONE_STATE=IDLE`
+    broadcast or a missed `onNotificationRemoved` could otherwise leak a token and silently kill the next
+    call's alert until a process restart. It auto-clears (re-armed on each sign of life).
+  - An incoming VoIP call is now routed to the **Calls path only** (always returns), so a call from an app
+    that's also enabled as a per-app alert can't **double-buzz**.
+
 ## 1.38 — Responsive during long history syncs (Mac, #64 / #65)
 
 - **Mac stays responsive during long historical offloads and dashboard analysis** (community PRs #64,
