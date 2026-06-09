@@ -226,6 +226,17 @@ class WhoopBleClient(
         private const val CCCD_RETRY_DELAY_MS = 60L
         private const val MAX_CCCD_RETRIES = 8
 
+        /** A command write can transiently return BUSY on a stricter stack (notably Android 13+, and
+         *  worst on Android 16) when the previous write hasn't physically completed. Retry the SAME
+         *  frame a few times (short backoff) instead of dropping it — a dropped TOGGLE_REALTIME_HR /
+         *  SET_CLOCK / offload-ack silently breaks live HR, the clock, or the backfill (issue #77). */
+        private const val WRITE_RETRY_DELAY_MS = 12L
+        private const val MAX_WRITE_RETRIES = 6
+        /** Pacing gap before freeing the slot after a WITHOUT-response write. A bare post fires the next
+         *  write on the same looper tick — before Android's GATT has accepted the previous one, which it
+         *  then rejects. A small gap lets the stack settle and largely eliminates the rejections (#77). */
+        private const val WITHOUT_RESPONSE_PACE_MS = 8L
+
         /**
          * True when a frame is part of the historical offload (HISTORICAL_DATA=47, EVENT=48,
          * METADATA=49, CONSOLE_LOGS=50) rather than the live stream (REALTIME_DATA=40,
@@ -426,6 +437,11 @@ class WhoopBleClient(
     private data class PendingWrite(val frame: ByteArray, val withResponse: Boolean)
     private val writeQueue = ConcurrentLinkedQueue<PendingWrite>()
     private var writeInFlight = false
+    /** A frame being retried after a transient BUSY rejection. Held here rather than re-added to the
+     *  queue so it keeps its place AHEAD of later commands — command order matters (e.g. SET_CLOCK
+     *  before GET_CLOCK). Only ever touched on the main looper inside [drainWriteQueue]. */
+    private var pendingRetry: PendingWrite? = null
+    private var writeRetries = 0
 
     /** Descriptor-write queue: enabling notifications is also a one-at-a-time GATT operation. */
     private val cccdQueue = ConcurrentLinkedQueue<BluetoothGattCharacteristic>()
@@ -1280,7 +1296,9 @@ class WhoopBleClient(
         if (writeInFlight) return
         val g = gatt ?: return
         val ch = cmdCharacteristic ?: return
-        val item = writeQueue.poll() ?: return
+        // A frame rejected BUSY last tick takes priority so it keeps its place in the command sequence.
+        val item = pendingRetry ?: writeQueue.poll() ?: return
+        pendingRetry = null
         writeInFlight = true
 
         val writeType = if (item.withResponse) {
@@ -1301,21 +1319,34 @@ class WhoopBleClient(
         }
 
         if (!ok) {
-            // The stack rejected the write outright (no callback will come) — release the slot and
-            // keep draining so one bad write doesn't wedge the queue.
+            // Transient BUSY — the stack hasn't freed the previous write yet (common on Android 13+/16,
+            // worst when the slot was freed too eagerly). Re-hold THIS frame and retry shortly instead
+            // of dropping it: a dropped TOGGLE_REALTIME_HR / SET_CLOCK / offload-ack silently breaks
+            // live HR, the clock, or the backfill (issue #77 — a Pixel 7 on Android 16 saw exactly this).
             writeInFlight = false
-            log("writeCharacteristic rejected by stack; dropping one frame")
-            drainWriteQueue()
-            return
-        }
-
-        // WITHOUT-response writes get NO onCharacteristicWrite callback, so free the slot promptly
-        // on the main looper to let the next frame go (a short hop avoids back-to-back stack stalls).
-        if (!item.withResponse) {
-            handler.post {
-                writeInFlight = false
+            if (writeRetries < MAX_WRITE_RETRIES) {
+                writeRetries++
+                log("writeCharacteristic busy; retry $writeRetries/$MAX_WRITE_RETRIES")
+                pendingRetry = item
+                handler.postDelayed({ drainWriteQueue() }, WRITE_RETRY_DELAY_MS)
+            } else {
+                // Genuinely stuck after several tries — drop this one frame so it can't wedge the queue.
+                log("writeCharacteristic rejected by stack; dropping one frame (after $MAX_WRITE_RETRIES retries)")
+                writeRetries = 0
                 drainWriteQueue()
             }
+            return
+        }
+        writeRetries = 0   // this frame went out — reset the per-frame retry budget
+
+        // WITHOUT-response writes get NO onCharacteristicWrite callback, so free the slot ourselves —
+        // but after a short PACING gap. A bare post fired the next write on the same looper tick, before
+        // the stack had accepted this one, so Android 16 rejected it (issue #77). postDelayed, not post.
+        if (!item.withResponse) {
+            handler.postDelayed({
+                writeInFlight = false
+                drainWriteQueue()
+            }, WITHOUT_RESPONSE_PACE_MS)
         }
     }
 
@@ -1696,6 +1727,8 @@ class WhoopBleClient(
         writeQueue.clear()
         cccdQueue.clear()
         writeInFlight = false
+        pendingRetry = null
+        writeRetries = 0
         cccdInFlight = false
         cccdRetries = 0
         sessionStarted = false

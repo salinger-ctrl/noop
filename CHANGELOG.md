@@ -17,6 +17,18 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.48 — More reliable Bluetooth on newer Android phones (#77)
+
+- **Fixed (Android): dropped Bluetooth commands on stricter stacks (Android 13+, worst on Android 16).**
+  When the phone's GATT stack was momentarily busy it would reject a command write, and NOOP **dropped**
+  it instead of retrying. The dropped frame was often the one that **starts live HR**, **sets the strap
+  clock**, or **acks a history chunk** — so live HR sometimes never started and overnight data never
+  landed, even with a healthy strap and pairing. NOOP now **retries a rejected write** (bounded backoff,
+  preserving command order) and **paces** without-response writes so the stack keeps up.
+- Diagnosed from a detailed strap log: a Pixel 7 on Android 16 whose offload completed cleanly but whose
+  `TOGGLE_REALTIME_HR` / `SET_CLOCK` writes were being rejected and dropped.
+- macOS: **version bump only** — it relies on CoreBluetooth's own write queue and was never affected.
+
 ## 1.47 — Auto-sync Health Connect (Android)
 
 - **Opt-in Health Connect auto-sync (Android).** Turn it on under Data Sources → Health Connect and NOOP
