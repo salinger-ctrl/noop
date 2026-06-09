@@ -255,10 +255,16 @@ class WhoopBleClient(
          * this firmware, so the backfill idle-watchdog must NOT be re-armed by it — only by genuine
          * offload progress. Port of Swift `BLEManager.isOffloadFrame`.
          */
-        fun isOffloadFrame(frame: ByteArray): Boolean {
-            if (frame.size <= 4) return false
-            return when (frame[4].toInt() and 0xFF) {
-                47, 48, 49, 50 -> true // HISTORICAL_DATA / EVENT / METADATA / CONSOLE_LOGS
+        fun isOffloadFrame(frame: ByteArray, family: DeviceFamily): Boolean {
+            // WHOOP 5/MG's inner record starts at byte 8 (+4 envelope), and its HISTORY_END/COMPLETE
+            // is PUFFIN_METADATA=56, NOT 49. Reading frame[4] with {47,48,49,50} (the old WHOOP4-only
+            // form) drops every 5/MG offload-closing frame as live-flood, so the strap never trims and
+            // offload never completes. Matches the hardware-proven Swift isOffloadFrame
+            // (BLEManager.swift:500, "case 47,48,49,50,56"). (#78)
+            val typeIndex = if (family == DeviceFamily.WHOOP5) 8 else 4
+            if (frame.size <= typeIndex) return false
+            return when (frame[typeIndex].toInt() and 0xFF) {
+                47, 48, 49, 50, 56 -> true // HISTORICAL_DATA / EVENT / METADATA / CONSOLE_LOGS / PUFFIN_METADATA
                 else -> false // 40 REALTIME_DATA, 43 REALTIME_RAW_DATA (live flood)
             }
         }
@@ -613,7 +619,11 @@ class WhoopBleClient(
         // experimental: the strap may or may not honor that specific command, but it's no longer a blind
         // guess. Everything else stays dropped (offload commands need the held work). WHOOP 4.0 unaffected.
         if (connectedFamily == DeviceFamily.WHOOP5) {
-            if (cmd != CommandNumber.TOGGLE_REALTIME_HR && cmd != CommandNumber.RUN_HAPTICS_PATTERN) {
+            // 5/MG allow-list: live HR, buzz, and the historical-offload pair (trigger + ack). The
+            // offload commands ride the SAME proven puffin COMMAND frame as the Swift path
+            // (whoop5HistoricalAckFrame = puffinCommandFrame(23, [0x01]+endData)). (#78)
+            if (cmd != CommandNumber.TOGGLE_REALTIME_HR && cmd != CommandNumber.RUN_HAPTICS_PATTERN &&
+                cmd != CommandNumber.SEND_HISTORICAL_DATA && cmd != CommandNumber.HISTORICAL_DATA_RESULT) {
                 log("send(${cmd.name}) skipped — no WHOOP 5/MG framing for this command yet")
                 return
             }
@@ -880,6 +890,16 @@ class WhoopBleClient(
                 }
                 drainCccdQueue(g)
                 if (wantsRealtime) send(CommandNumber.TOGGLE_REALTIME_HR, byteArrayOf(1))
+                // 5/MG: the CLIENT_HELLO ack IS the handshake. Mark it done — it GATES beginBackfill
+                // and is never set for 5/MG otherwise, so without this the offload could never start —
+                // then kick the historical offload, mirroring the proven Swift post-bond flow
+                // (BLEManager.swift:1082-1089) and the WHOOP4 handshake tail. (#78 / 5/MG offload)
+                connectHandshakeDone = true
+                if (!backfillStarted) {
+                    backfillStarted = true
+                    handler.postDelayed({ requestSync() }, INITIAL_BACKFILL_DELAY_MS)
+                    startBackfillTimer()
+                }
             } else if (!didBond && connectedFamily == DeviceFamily.WHOOP4) {
                 didBond = true
                 _state.value = _state.value.copy(bonded = true, encryptedBond = true)   // WHOOP4 bond is genuine (#69)
@@ -995,7 +1015,7 @@ class WhoopBleClient(
                         // the serial drain (preserves chunk order) + re-arm the idle watchdog on them.
                         // The live type-40/43 flood is dropped here (extractHistoricalStreams ignores
                         // it; feeding it only delays each chunk's insert->trim-ack and stalls the strap).
-                        if (isOffloadFrame(frame)) {
+                        if (isOffloadFrame(frame, connectedFamily)) {
                             armBackfillTimeout()
                             routeBackfillFrame(frame)
                         }
@@ -1619,7 +1639,7 @@ class WhoopBleClient(
             return
         }
         if (backfilling) return
-        backfiller.begin()
+        backfiller.begin(connectedFamily)   // family drives the +4 puffin offset for 5/MG (#78)
         backfilling = true
         ackedChunksThisSession = 0
         _state.value = _state.value.copy(backfilling = true, syncChunksThisSession = 0)

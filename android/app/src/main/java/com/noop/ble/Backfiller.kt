@@ -57,8 +57,15 @@ class Backfiller(
      * correct wall time. Settable by [WhoopBleClient] if a real correlation lands.
      */
     var clockRef: ClockRef = ClockRef.identityNow(),
-    private val family: DeviceFamily = DeviceFamily.WHOOP4,
 ) {
+
+    /**
+     * Strap family for the CURRENT offload, set at [begin] — drives the family-aware frame parse
+     * (5/MG inner record is +4) and the +4 end_data slice. The Backfiller is constructed once at
+     * client init (before the family is known), so this is settable per-offload rather than a
+     * constructor arg. Mirrors Swift `Backfiller.family` set in `begin(family:)`. (#78)
+     */
+    private var family: DeviceFamily = DeviceFamily.WHOOP4
 
     /** True while a historical offload session is active. */
     @Volatile
@@ -83,7 +90,8 @@ class Backfiller(
      * HISTORY_START then repeated HISTORY_ENDs, so we must accumulate from the outset.
      * Port of Swift `begin()`.
      */
-    fun begin() {
+    fun begin(family: DeviceFamily = DeviceFamily.WHOOP4) {
+        this.family = family
         isBackfilling = true
         synchronized(chunkLock) {
             chunk.clear()
@@ -127,7 +135,7 @@ class Backfiller(
      * this END become the next chunk. An END with no records is still acked (advances the trim).
      */
     private suspend fun finishChunk(unix: Long, trim: Long, endFrame: ByteArray) {
-        val endData = endData(endFrame) ?: return
+        val endData = endData(endFrame, family) ?: return
 
         val frames = synchronized(chunkLock) {
             val snapshot = ArrayList(chunk)
@@ -174,15 +182,16 @@ class Backfiller(
         const val STRAP_TRIM_CURSOR = "strap_trim"
 
         /**
-         * The 8-byte `end_data` the high-freq-sync ack requires: metadata.data[10:18].
-         * metadata.data begins at frame[7] (after [type,seq,cmd]), so end_data = frame[17:25].
-         * The trim cursor is the first u32 of end_data (data[10:14]). Returns null if the frame is
-         * too short (a real HISTORY_END is >= 14 data bytes; this guards a malformed frame).
-         * Port of Swift `Backfiller.endData(from:)`.
+         * The 8-byte `end_data` the high-freq-sync ack requires: metadata.data[10:18]. The inner
+         * record begins at frame[7] on WHOOP4 (end_data = frame[17:25]) and at frame[11] on WHOOP5/MG
+         * (the +4 puffin envelope → end_data = frame[21:29]). The trim cursor is the first u32 of
+         * end_data. Returns null if the frame is too short. Verified against a real WHOOP5 HISTORY_END
+         * (trim=112193 at frame[21:25]); port of Swift `Backfiller.endData(from:family:)`. (#78)
          */
-        fun endData(frame: ByteArray): ByteArray? {
-            if (frame.size < 25) return null
-            return frame.copyOfRange(17, 25)
+        fun endData(frame: ByteArray, family: DeviceFamily): ByteArray? {
+            val start = if (family == DeviceFamily.WHOOP5) 21 else 17
+            if (frame.size < start + 8) return null
+            return frame.copyOfRange(start, start + 8)
         }
     }
 }

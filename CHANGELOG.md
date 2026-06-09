@@ -17,6 +17,29 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.52 — WHOOP 5.0/MG history offload, Android (#78)
+
+- **New (Android, experimental): WHOOP 5.0/MG historical offload** — Android reaches parity with the
+  Mac, which already had this. A 5/MG can now download its stored history (not just stream live HR),
+  which is what feeds recovery / strain / sleep.
+- **The fix that made it actually work.** The 5/MG "puffin" envelope shifts the inner record **+4** vs
+  4.0, and its HISTORY_END/COMPLETE marker is **`PUFFIN_METADATA` (type 56)**, not 49. Android's
+  offload-frame check read `frame[4]` with `{47,48,49,50}` — so on a real strap **every** history-closing
+  frame was dropped as live-flood, no chunk ever committed, the strap never trimmed, and the offload
+  idle-watchdog timed out: zero history. NOOP now reads the type at `frame[8]` for 5/MG and accepts
+  `{47,48,49,50,56}` — matching the hardware-proven Swift path (`BLEManager.isOffloadFrame`,
+  `BLEManager.swift:500`). Ported pieces: family-aware `isOffloadFrame`, `decodeMetadataWhoop5`
+  (meta_type@10 / unix@11 / trim_cursor@21), `Backfiller.begin(family)` + `endData` (+4 → `frame[21:29]`),
+  the 5/MG `send()` allow-list (`SEND_HISTORICAL_DATA` + `HISTORICAL_DATA_RESULT`, framed as puffin
+  commands), and the 5/MG post-bond offload kick (the CLIENT_HELLO ack now marks the handshake done,
+  which gates the offload). A new `Whoop5OffloadTest` pins the type-56 case the original PR's tests missed.
+- **Experimental — please verify on a real strap.** The offsets are cross-confirmed (Swift + Linux tool +
+  the hardware-anchored +4), but no captured 5/MG HISTORY_END frame exists in-repo, so 5.0/MG owners:
+  please report whether your history actually populates end-to-end. Reimplemented from a community
+  contribution (#78), credited; the v1.48–1.51 reliability work (write queue, resubscribe, sync pill,
+  family-gated battery) is untouched.
+- macOS: **version bump only** — its 5/MG offload path was already complete and hardware-verified.
+
 ## 1.51 — True battery %, a sync indicator, and HR on imported workouts (#77)
 
 - **Fixed: battery flashing 100% then correcting (or reverting to 100%).** The WHOOP 4.0 exposes the

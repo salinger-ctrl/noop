@@ -7,7 +7,7 @@ enum AppChangelog {
 
     /// Bump this when you add a release below. The "What's New" sheet shows automatically when the
     /// stored last-seen version is behind this. (Decoupled from the bundle version on purpose.)
-    static let currentVersion = "1.51"
+    static let currentVersion = "1.52"
 
     struct Release: Identifiable {
         let version: String
@@ -19,6 +19,13 @@ enum AppChangelog {
 
     /// Newest first.
     static let releases: [Release] = [
+        Release(
+            version: "1.52",
+            title: "WHOOP 5.0/MG history offload (Android)",
+            date: "June 2026",
+            items: [
+                "New (Android, experimental): a WHOOP 5.0/MG can now offload its stored history, not just stream live HR — the same thing the Mac already did. The 5/MG Bluetooth envelope shifts every field by 4 bytes and its end-of-history marker is a different type than the 4.0's, so the app was silently dropping every \"history finished\" frame and the strap never released its records. NOOP now reads those frames at the right place (matching the Mac), so history can download and feed recovery, strain and sleep. If you have a 5.0/MG, please report whether your history populates — it's experimental until confirmed on more straps. Thanks to a community contribution (#78). (macOS: version bump only — it already had this.)",
+            ]),
         Release(
             version: "1.51",
             title: "True battery %, a sync indicator, and HR on imported workouts",

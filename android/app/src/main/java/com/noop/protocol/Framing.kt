@@ -230,9 +230,28 @@ object Framing {
         // their per-type 5.0 offsets are confirmed on hardware — we don't invent offsets.
         when (name) {
             "REALTIME_DATA" -> decodeRealtimeWhoop5(frame, parsed)
+            "METADATA" -> decodeMetadataWhoop5(frame, parsed)
             else -> Unit
         }
         return ParsedFrame(ok = true, crcOk = check.crc32Ok, typeName = name, parsed = parsed)
+    }
+
+    /**
+     * METADATA (PUFFIN_METADATA, type 56) for WHOOP 5.0/MG — the 4.0 METADATA layout + 4 (the inner
+     * record starts at byte 8 vs 4): meta_type@10 (u8), and for a HISTORY_END additionally unix@11
+     * (u32), subsec@15 (u16), trim_cursor@21 (u32). Without this, parseWhoop5 left every 5/MG METADATA
+     * frame field-less, so classifyHistoricalMeta could never recognise HISTORY_END/COMPLETE → the
+     * Backfiller never acked/trimmed → 5/MG offload never completed. Offsets verified against real
+     * WHOOP 5 HISTORY_END frames (Swift decodeWhoop5Metadata, Interpreter.swift:407). (#78)
+     */
+    private fun decodeMetadataWhoop5(frame: ByteArray, parsed: MutableMap<String, Any?>) {
+        val mt = frame.u8(10) ?: return
+        parsed["meta_type"] = metaLabel(mt)
+        // Only a HISTORY_END carries unix/subsec/trim; the u-reads null out on the shorter
+        // START/COMPLETE frames, so classifyHistoricalMeta keys those off meta_type alone.
+        frame.u32(11)?.let { parsed["unix"] = it.toInt() }
+        frame.u16(15)?.let { parsed["subsec"] = it }
+        frame.u32(21)?.let { parsed["trim_cursor"] = it.toInt() }
     }
 
     /**
