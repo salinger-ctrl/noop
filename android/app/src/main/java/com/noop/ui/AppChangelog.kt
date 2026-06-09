@@ -25,7 +25,7 @@ object AppChangelog {
      * Bump this when you add a release below. The "What's New" sheet shows automatically when the
      * stored last-seen version is behind this. (Decoupled from the bundle version on purpose.)
      */
-    const val CURRENT_VERSION = "1.53"
+    const val CURRENT_VERSION = "1.54"
 
     data class Release(
         val version: String,
@@ -36,6 +36,14 @@ object AppChangelog {
 
     /** Newest first. */
     val releases: List<Release> = listOf(
+        Release(
+            version = "1.54",
+            title = "French WHOOP exports now import",
+            date = "June 2026",
+            items = listOf(
+                "Fixed: French WHOOP CSV exports now import. Like German and Spanish before it, a French export translates both the column headers (Score de récupération, Variabilité de la fréquence cardiaque, …) and the sleep/workout filenames (sommeil.csv, entrainements.csv), so it used to match nothing and reported \"0 items.\" NOOP now maps every French column — including the full workout set with HR zones — and recognises the French filenames, so recovery, strain, sleep, HRV and workouts all import. Mac and Android. Thanks to a reporter who supplied a real export's headers (#79).",
+            ),
+        ),
         Release(
             version = "1.53",
             title = "Recovery builds from your strap alone (Android)",

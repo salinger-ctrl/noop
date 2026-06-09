@@ -17,6 +17,20 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.54 — French WHOOP exports now import (#79)
+
+- **Fixed: a French WHOOP export imported 0 items.** Third localisation after German (#3) and Spanish
+  (#76). A French export translates **both** the column headers (`Score de récupération %`,
+  `Variabilité de la fréquence cardiaque (ms)`, `Durée du sommeil paradoxal (min)`, …) **and** the
+  sleep/workout filenames (`sommeil.csv`, `entrainements.csv`) — so nothing matched.
+- NOOP now maps the **full** French column set, including the complete **workouts** file (HR zones,
+  activity name/strain) — the reporter supplied all three header rows, so French is more complete than
+  Spanish out of the gate. Two French quirks handled by the normaliser (both fold to `_`): the
+  apostrophe in `Niveau d'oxygène` / `Temps d'éveil` (straight `'` **and** curly `’`), and the
+  **non-breaking space** before `%` in the `Zone FC 1 %` workout headers. `physiological_cycles.csv`
+  keeps its English filename but French columns; both handled. Mac + Android. Real-header parse +
+  normalisation tests pin it (incl. the apostrophe + NBSP cases); verified with `swift test`.
+
 ## 1.53 — Recovery builds from your strap alone, Android (#78)
 
 - **New (Android): BLE-only recovery cold-start.** The recovery baseline only ever seeded from

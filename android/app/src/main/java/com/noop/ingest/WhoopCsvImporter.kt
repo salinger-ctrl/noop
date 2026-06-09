@@ -238,6 +238,9 @@ object WhoopCsvImporter {
         // Folded + unfolded variants — the filename is lowercased but not diacritic-folded.
         "sueño.csv", "sueno.csv" -> SLEEPS_NAME
         "entrenamientos.csv" -> WORKOUTS_NAME
+        // French (issue #79): physiological_cycles.csv keeps its English name; sleep/workouts renamed.
+        "sommeil.csv" -> SLEEPS_NAME
+        "entrainements.csv", "entraînements.csv" -> WORKOUTS_NAME
         else -> null
     }
 

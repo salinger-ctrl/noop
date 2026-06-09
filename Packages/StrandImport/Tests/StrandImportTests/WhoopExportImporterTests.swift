@@ -261,4 +261,37 @@ final class WhoopExportImporterTests: XCTestCase {
         XCTAssertEqual(rows[0].dayStrain, 12.5)
         XCTAssertEqual(rows[0].cycleStart, Fixtures.utc(2024, 3, 1, 6, 0, 0))
     }
+
+    // MARK: - Localized (French) column headers — issue #79
+
+    func testFrenchHeaderNormalizationAliases() {
+        // Diacritic-folded French headers map onto the canonical English keys.
+        XCTAssertEqual(HeaderNorm.normalize("Score de récupération %"), "recovery_score_pct")
+        XCTAssertEqual(HeaderNorm.normalize("Variabilité de la fréquence cardiaque (ms)"), "heart_rate_variability_ms")
+        XCTAssertEqual(HeaderNorm.normalize("Durée du sommeil paradoxal (min)"), "rem_duration_min")
+        XCTAssertEqual(HeaderNorm.normalize("Régularité du sommeil %"), "sleep_consistency_pct")
+        XCTAssertEqual(HeaderNorm.normalize("Sieste"), "nap")
+        // The apostrophe folds to "_" — BOTH the straight (') and the curly (’) variant must map.
+        XCTAssertEqual(HeaderNorm.normalize("Niveau d'oxygène %"), "blood_oxygen_pct")
+        XCTAssertEqual(HeaderNorm.normalize("Niveau d’oxygène %"), "blood_oxygen_pct")
+        XCTAssertEqual(HeaderNorm.normalize("Temps d'éveil (min)"), "awake_duration_min")
+        // The workout zone headers carry a NON-BREAKING SPACE before % — it folds to "_" too.
+        XCTAssertEqual(HeaderNorm.normalize("Zone FC 1\u{00A0}%"), "hr_zone_1_pct")
+        XCTAssertEqual(HeaderNorm.normalize("Nom de l'activité"), "activity_name")
+    }
+
+    func testFrenchCyclesValuesParse() throws {
+        // The EXACT physiological_cycles.csv header from a real French export (issue #79) + one data row.
+        let csv = """
+        Heure de début du cycle,Heure de fin du cycle,Fuseau horaire du cycle,Score de récupération %,Fréquence cardiaque au repos (bpm),Variabilité de la fréquence cardiaque (ms),Température cutanée (Celsius),Niveau d'oxygène %,Effort du jour,Dépense énergétique (cal.),FC max. (bpm),FC moyenne (bpm),Premiers signes de sommeil,Premiers signes de réveil,Performance Sommeil %,Fréquence respiratoire (tr/min),Durée du sommeil (min),Temps passé au lit (min),Durée du sommeil léger (min),Durée du sommeil profond (min),Durée du sommeil paradoxal (min),Temps d'éveil (min),Besoins en sommeil (min),Dette de sommeil (min),Efficacité du sommeil %,Régularité du sommeil %
+        2024-03-01 06:00:00,2024-03-02 06:00:00,UTC+00:00,80,52,95,33.5,96,12.5,2000,150,61,2024-03-01 23:00:00,2024-03-02 06:30:00,90,14,420,450,200,120,100,30,480,60,93,85
+        """
+        let rows = WhoopExportImporter().parseCycles(CSVTable(text: csv))
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows[0].recoveryScore, 80)
+        XCTAssertEqual(rows[0].restingHeartRate, 52)
+        XCTAssertEqual(rows[0].hrvMs, 95)
+        XCTAssertEqual(rows[0].dayStrain, 12.5)
+        XCTAssertEqual(rows[0].cycleStart, Fixtures.utc(2024, 3, 1, 6, 0, 0))
+    }
 }
