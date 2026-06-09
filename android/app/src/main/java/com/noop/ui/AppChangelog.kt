@@ -25,7 +25,7 @@ object AppChangelog {
      * Bump this when you add a release below. The "What's New" sheet shows automatically when the
      * stored last-seen version is behind this. (Decoupled from the bundle version on purpose.)
      */
-    const val CURRENT_VERSION = "1.54"
+    const val CURRENT_VERSION = "1.55"
 
     data class Release(
         val version: String,
@@ -36,6 +36,14 @@ object AppChangelog {
 
     /** Newest first. */
     val releases: List<Release> = listOf(
+        Release(
+            version = "1.55",
+            title = "Mac: recovery builds from your strap alone",
+            date = "June 2026",
+            items = listOf(
+                "New (Mac): recovery now builds from the strap's own offloaded nights, no WHOOP export needed — the same fix Android got in v1.53. The recovery baseline previously only learned from imported history, so a Bluetooth-only Mac user never crossed the \"learn your baseline\" threshold and recovery stayed blank. NOOP now seeds the baseline from the nights it computes on-device too, so after about four nights recovery lights up on its own. Honest-blank until then; a real import still wins per day. Also: the WHOOP 5.0/MG step counter now persists on Mac (parity with Android — surfaced later, still APPROXIMATE). Android: version bump only (it already had both).",
+            ),
+        ),
         Release(
             version = "1.54",
             title = "French WHOOP exports now import",

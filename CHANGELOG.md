@@ -17,6 +17,22 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.55 — Mac: recovery builds from your strap alone (#78)
+
+- **New (macOS): BLE-only recovery cold-start — parity with Android v1.53.** `IntelligenceEngine.swift`
+  now runs **two passes** (harvest each offloaded night's baseline-independent avgHrv/restingHr, seed
+  the baseline from the union of imported + on-device nightly values, re-score recovery). So a
+  Bluetooth-only Mac user crosses `Baselines.minNightsSeed` (4 nights) and recovery lights up without a
+  WHOOP import; honest-null until then; imported values still win per day (only-if-absent fill).
+- **macOS: WHOOP5 `step_motion_counter` now persists** (`StepSample` in WhoopProtocol Streams + routed in
+  `extractHistoricalStreams` + WhoopStore **v10 migration** — additive, no destructive fallback). Decoded
+  but previously dropped on Mac. Surfaced later; still APPROXIMATE. `StepSampleTests` pins the round-trip.
+- **Deferred (objectively): the skin-temp `/100` vs `/128` scale.** Both platforms store the **raw**
+  register and both real frames sit in the *overlap* of the two gate bands, so it's a **latent**
+  divergence, not a bug — and the obvious unification (`/128`, 20–45) would reject the off-wrist frame
+  and break the wrist-contact parity test. Left as-is pending a real calibration decision.
+- Android: **version bump only** — it already had recovery seeding and step persistence (v1.53).
+
 ## 1.54 — French WHOOP exports now import (#79)
 
 - **Fixed: a French WHOOP export imported 0 items.** Third localisation after German (#3) and Spanish
